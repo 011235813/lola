@@ -6,7 +6,10 @@ import time
 from lola import logger
 
 from lola.envs import *
-
+import sys
+sys.path.append('../../lio/env/')
+from room_symmetric_lola import EscapeRoom
+from room_asymmetric_lola import EscapeRoomAsym
 
 @click.command()
 # Experiment parameters
@@ -23,6 +26,7 @@ from lola.envs import *
 @click.option("--grid_size", type=int, default=3,
               help="Grid size of the coin game (used only for coin game).")
 @click.option("--trials", type=int, default=2, help="Number of trials.")
+@click.option("--n_agents", type=int, default=2, help="Number of agents.")
 
 # Learning parameters
 @click.option("--lola/--no-lola", default=True,
@@ -55,9 +59,10 @@ from lola.envs import *
 
 def main(exp_name, num_episodes, trace_length, exact, pseudo, grid_size,
          trials, lr, lr_correction, batch_size, bs_mul, simple_net, hidden,
-         num_units, reg, gamma, lola, opp_model, mem_efficient):
+         num_units, reg, gamma, lola, opp_model, mem_efficient, n_agents):
     # Sanity
-    assert exp_name in {"CoinGame", "IPD", "IMP"}
+    assert exp_name in {"CoinGame", "IPD", "IMP", "escape-room",
+                        "asym-escape-room"}
 
     # Resolve default parameters
     if exact:
@@ -74,6 +79,11 @@ def main(exp_name, num_episodes, trace_length, exact, pseudo, grid_size,
         trace_length = 150 if trace_length is None else trace_length
         batch_size = 4000 if batch_size is None else batch_size
         lr = 0.005 if lr is None else lr
+    elif exp_name == "escape-room" or exp_name == "asym-escape-room":
+        num_episodes = 50000 if num_episodes is None else num_episodes
+        trace_length = 5 if trace_length is None else trace_length
+        batch_size = 50 if batch_size is None else batch_size
+        lr = 1. if lr is None else lr
 
     # Import the right training function
     if exact:
@@ -120,6 +130,40 @@ def main(exp_name, num_episodes, trace_length, exact, pseudo, grid_size,
                   opp_model=opp_model,
                   hidden=hidden,
                   mem_efficient=mem_efficient)
+    elif exp_name == "escape-room":
+        def run(env, logdir):
+            if n_agents == 2:
+                from lola.train_er import train
+            elif n_agents == 3:
+                from lola.train_er_3player import train
+            train(env,
+                  num_episodes=num_episodes,
+                  trace_length=trace_length,
+                  batch_size=batch_size,
+                  gamma=gamma,
+                  set_zero=0,
+                  lr=lr,
+                  corrections=lola,
+                  simple_net=simple_net,
+                  hidden1=64,
+                  hidden2=32,
+                  mem_efficient=mem_efficient,
+                  logdir=logdir)
+    elif exp_name == "asym-escape-room":
+        def run(env, logdir):
+            from lola.train_er_asym import train
+            train(env,
+                  num_episodes=num_episodes,
+                  trace_length=trace_length,
+                  batch_size=batch_size,
+                  gamma=gamma,
+                  set_zero=0,
+                  lr=lr,
+                  simple_net=simple_net,
+                  hidden1=64,
+                  hidden2=32,
+                  mem_efficient=mem_efficient,
+                  logdir=logdir)            
 
     # Instantiate the environment
     if exp_name == "IPD":
@@ -131,13 +175,24 @@ def main(exp_name, num_episodes, trace_length, exact, pseudo, grid_size,
     elif exp_name == "CoinGame":
         env = CG(trace_length, batch_size, grid_size)
         gamma = 0.96 if gamma is None else gamma
+    elif exp_name == "escape-room":
+        env = EscapeRoom(trace_length, n_agents)
+        gamma = 0.99 if gamma is None else gamma
+    elif exp_name == "asym-escape-room":
+        env = EscapeRoomAsym(trace_length)
+        gamma = 0.99 if gamma is None else gamma
 
     # Run training
-    for seed in range(trials):
-        logger.configure(dir='logs/{}/seed-{}'.format(exp_name, seed))
+    # for seed in range(trials):
+    for seed in range(10, 20):
+        # logdir = 'logs/{}/seed-{}'.format(exp_name, seed)
+        # logdir = 'logs/{}/lr0p1-{}'.format(exp_name, seed)
+        logdir = 'logs/{}/n{}-lr1-{}'.format(exp_name, n_agents, seed)
+        logger.configure(dir=logdir)
         start_time = time.time()
-        run(env)
+        run(env, logdir)
         end_time  = time.time()
+        logger.reset()
 
 if __name__ == '__main__':
     main()

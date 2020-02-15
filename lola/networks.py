@@ -137,14 +137,14 @@ class Qnetwork:
             self.gamma_array_inverse = tf.placeholder(shape=[1, trace_length], dtype=tf.float32, name='gamma_array')
 
             if simple_net:
-                self.logit_vals = tf.Variable(tf.random_normal([5,1]))
+                self.logit_vals = tf.Variable(tf.random_normal([env.NUM_STATES,1]))
                 self.temp = tf.matmul(self.scalarInput, self.logit_vals)
                 temp_concat = tf.concat([self.temp, self.temp * 0], 1)
                 self.log_pi = tf.nn.log_softmax(temp_concat)
             else:
                 act = tf.nn.relu(layers.fully_connected(self.scalarInput, num_outputs=hidden, activation_fn=None))
-                self.log_pi = tf.nn.log_softmax(layers.fully_connected(act, num_outputs=2, activation_fn=None))
-            self.values = tf.Variable(tf.random_normal([5,1]), name='value_params')
+                self.log_pi = tf.nn.log_softmax(layers.fully_connected(act, num_outputs=env.NUM_ACTIONS, activation_fn=None))
+            self.values = tf.Variable(tf.random_normal([env.NUM_STATES,1]), name='value_params')
             self.value = tf.reshape(tf.matmul(self.scalarInput, self.values), [batch_size, -1])
             self.sample_return = tf.placeholder(shape=[None, trace_length],dtype=tf.float32, name='sample_return')
             self.sample_reward = tf.placeholder(shape=[None, trace_length], dtype=tf.float32, name='sample_reward_new')
@@ -176,6 +176,67 @@ class Qnetwork:
                 self.value_params.append(i)
 
         self.trainer = tf.train.GradientDescentOptimizer(learning_rate=1)# / arglist.bs)
+        self.updateModel = self.trainer.minimize(self.loss, var_list=self.value_params)
+
+        self.log_pi_action_bs = tf.reduce_sum(tf.reshape(self.log_pi_action, [-1, trace_length]),1)
+        self.log_pi_action_bs_t = tf.reshape(self.log_pi_action, [batch_size, trace_length])
+        self.setparams= SetFromFlat(self.parameters)
+        self.getparams= GetFlat(self.parameters)
+
+        
+class Qnetwork_er:
+    """
+    Network for escape room experiments
+    """
+    def __init__(self, myScope, agent, env, batch_size, gamma, trace_length, hidden1, hidden2, simple_net, lr, num_states, num_actions):
+        #The network recieves a frame from the game, flattened into an array.
+        #It then resizes it and processes it through four convolutional layers.
+        with tf.variable_scope(myScope):
+            self.scalarInput =  tf.placeholder(shape=[None, num_states],dtype=tf.float32)
+            self.gamma_array = tf.placeholder(shape=[1, trace_length], dtype=tf.float32, name='gamma_array')
+            self.gamma_array_inverse = tf.placeholder(shape=[1, trace_length], dtype=tf.float32, name='gamma_array')
+
+            if simple_net:
+                self.logit_vals = tf.Variable(tf.random_normal([num_states,1]))
+                self.temp = tf.matmul(self.scalarInput, self.logit_vals)
+                temp_concat = tf.concat([self.temp, self.temp * 0], 1)
+                self.log_pi = tf.nn.log_softmax(temp_concat)
+            else:
+                act = tf.nn.relu(layers.fully_connected(self.scalarInput, num_outputs=hidden1, activation_fn=None))
+                act = tf.nn.relu(layers.fully_connected(act, num_outputs=hidden2, activation_fn=None))
+                self.log_pi = tf.nn.log_softmax(layers.fully_connected(act, num_outputs=num_actions, activation_fn=None))
+            self.values = tf.Variable(tf.random_normal([num_states,1]), name='value_params')
+            self.value = tf.reshape(tf.matmul(self.scalarInput, self.values), [batch_size, -1])
+            self.sample_return = tf.placeholder(shape=[None, trace_length],dtype=tf.float32, name='sample_return')
+            self.sample_reward = tf.placeholder(shape=[None, trace_length], dtype=tf.float32, name='sample_reward_new')
+
+            self.next_value = tf.placeholder(
+                shape=[None, 1], dtype=tf.float32, name='next_value')
+            self.next_v = tf.matmul(self.next_value, self.gamma_array_inverse)
+            self.target = self.sample_return + self.next_v
+            self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
+            self.actions_onehot = tf.one_hot(
+                self.actions, num_actions, dtype=tf.float32)
+
+            self.predict = tf.multinomial(self.log_pi ,1)
+            self.predict = tf.squeeze(self.predict)
+            self.log_pi_action = tf.reduce_mean(
+                tf.multiply(self.log_pi, self.actions_onehot),
+                reduction_indices=1)
+
+            self.td_error = tf.square(self.target - self.value) / 2
+            self.loss = tf.reduce_mean(self.td_error)
+
+        self.parameters = []
+        self.value_params = []
+        for i in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
+                                   scope=myScope):
+            if not ('value_params' in i.name):
+                self.parameters.append(i)   # i.name if you want just a name
+            else:
+                self.value_params.append(i)
+
+        self.trainer = tf.train.GradientDescentOptimizer(learning_rate=lr)# / arglist.bs)
         self.updateModel = self.trainer.minimize(self.loss, var_list=self.value_params)
 
         self.log_pi_action_bs = tf.reduce_sum(tf.reshape(self.log_pi_action, [-1, trace_length]),1)
