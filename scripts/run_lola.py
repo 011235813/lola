@@ -57,13 +57,21 @@ from room_asymmetric_lola import EscapeRoomAsym
 @click.option("--gamma", type=float, default=None,
               help="Discount factor.")
 
+# Escape room parameters
+@click.option("--sym/--asym", default=True,
+              help="Symmetric Escape Room.")
+@click.option("--reward_type", type=str, default="continuous",
+              help="Continuous or discrete reward-giving actions.")
+@click.option("--dirname", type=str, default="er-dc",
+              help="subfolder name to save log files.")
+
 def main(exp_name, num_episodes, trace_length, exact, pseudo, grid_size,
          trials, lr, lr_correction, batch_size, bs_mul, simple_net, hidden,
-         num_units, reg, gamma, lola, opp_model, mem_efficient, n_agents):
+         num_units, reg, gamma, lola, opp_model, mem_efficient, n_agents,
+         sym, reward_type, dirname):
     # Sanity
-    assert exp_name in {"CoinGame", "IPD", "IMP", "escape-room",
-                        "asym-escape-room"}
-
+    assert exp_name in {"CoinGame", "IPD", "IMP", "escape-room"}
+                        
     # Resolve default parameters
     if exact:
         num_episodes = 50 if num_episodes is None else num_episodes
@@ -79,7 +87,7 @@ def main(exp_name, num_episodes, trace_length, exact, pseudo, grid_size,
         trace_length = 150 if trace_length is None else trace_length
         batch_size = 4000 if batch_size is None else batch_size
         lr = 0.005 if lr is None else lr
-    elif exp_name == "escape-room" or exp_name == "asym-escape-room":
+    elif exp_name == "escape-room":
         num_episodes = 50000 if num_episodes is None else num_episodes
         trace_length = 5 if trace_length is None else trace_length
         batch_size = 50 if batch_size is None else batch_size
@@ -132,10 +140,17 @@ def main(exp_name, num_episodes, trace_length, exact, pseudo, grid_size,
                   mem_efficient=mem_efficient)
     elif exp_name == "escape-room":
         def run(env, logdir):
-            if n_agents == 2:
-                from lola.train_er import train
-            elif n_agents == 3:
-                from lola.train_er_3player import train
+            if not sym:
+                from lola.train_er_asym import train
+            else:
+                if reward_type == 'continuous':
+                    from lola.train_er_discrete_continuous import train
+                elif n_agents == 2:
+                    from lola.train_er import train
+                elif n_agents == 3:
+                    from lola.train_er_3player import train
+                else:
+                    raise ValueError("Only 2 or 3 agents are supported for Escape Room.")
             train(env,
                   num_episodes=num_episodes,
                   trace_length=trace_length,
@@ -149,21 +164,6 @@ def main(exp_name, num_episodes, trace_length, exact, pseudo, grid_size,
                   hidden2=32,
                   mem_efficient=mem_efficient,
                   logdir=logdir)
-    elif exp_name == "asym-escape-room":
-        def run(env, logdir):
-            from lola.train_er_asym import train
-            train(env,
-                  num_episodes=num_episodes,
-                  trace_length=trace_length,
-                  batch_size=batch_size,
-                  gamma=gamma,
-                  set_zero=0,
-                  lr=lr,
-                  simple_net=simple_net,
-                  hidden1=64,
-                  hidden2=32,
-                  mem_efficient=mem_efficient,
-                  logdir=logdir)            
 
     # Instantiate the environment
     if exp_name == "IPD":
@@ -176,21 +176,31 @@ def main(exp_name, num_episodes, trace_length, exact, pseudo, grid_size,
         env = CG(trace_length, batch_size, grid_size)
         gamma = 0.96 if gamma is None else gamma
     elif exp_name == "escape-room":
-        env = EscapeRoom(trace_length, n_agents)
         gamma = 0.99 if gamma is None else gamma
-    elif exp_name == "asym-escape-room":
-        env = EscapeRoomAsym(trace_length)
-        gamma = 0.99 if gamma is None else gamma
+        if not sym:
+            env = EscapeRoomAsym(trace_length)
+        else:
+            if reward_type == 'continuous':
+                # giving rewards is handled outside env for the
+                # case of continuous reward-giving actions
+                env = EscapeRoom(trace_length, n_agents,
+                                 allow_giving=False)
+            else:
+                env = EscapeRoom(trace_length, n_agents,
+                                 allow_giving=True)
 
     # Run training
     # for seed in range(trials):
-    for seed in range(10, 20):
+    for seed in range(0, 1):
         # logdir = 'logs/{}/seed-{}'.format(exp_name, seed)
+        # logdir = 'logs/{}/inexact-seed-{}'.format(exp_name, seed)
         # logdir = 'logs/{}/lr0p1-{}'.format(exp_name, seed)
-        logdir = 'logs/{}/n{}-lr1-{}'.format(exp_name, n_agents, seed)
+        # logdir = 'logs/{}/n{}-lr10-{}'.format(exp_name, n_agents, seed)
+        logdir = 'logs/{}/n{}-lr0p1-{}'.format(dirname, n_agents, seed)
         logger.configure(dir=logdir)
         start_time = time.time()
         run(env, logdir)
+        # run(env)
         end_time  = time.time()
         logger.reset()
 

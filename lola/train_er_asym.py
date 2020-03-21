@@ -19,7 +19,7 @@ def update(mainQN, lr, final_delta_1_v, final_delta_2_v):
 
 
 def train(env, *, num_episodes, trace_length, batch_size, gamma,
-          set_zero, lr, simple_net, hidden1, hidden2,
+          set_zero, lr, corrections, simple_net, hidden1, hidden2,
           mem_efficient=True, logdir=''):
     # observation_space = env.NUM_STATES
     y = gamma
