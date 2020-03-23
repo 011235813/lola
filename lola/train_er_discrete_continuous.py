@@ -52,7 +52,8 @@ def train(env, *, num_episodes, trace_length, batch_size, gamma,
 
     if total_n_agents == 2:
         corrections_func(mainQN, batch_size=batch_size,
-                         trace_length=trace_length)
+                         trace_length=trace_length,
+                         corrections=corrections)
     elif total_n_agents == 3:
         corrections_func_3player(mainQN, batch_size=batch_size,
                                  trace_length=trace_length)
@@ -148,6 +149,7 @@ def train(env, *, num_episodes, trace_length, batch_size, gamma,
                 total_given_to_each_agent = np.zeros(n_agents)
                 total_given_by_each_agent = np.zeros(n_agents)
                 list_r_sampled = []
+                list_given = []
                 for idx_agent in range(n_agents):
                     r_given, r_sampled = mainQN[idx_agent].give_reward(
                         s[idx_agent], a_all, sess)
@@ -155,11 +157,12 @@ def train(env, *, num_episodes, trace_length, batch_size, gamma,
                     total_given_to_each_agent += r_given
                     total_given_by_each_agent[idx_agent] = np.sum(r_given)
                     list_r_sampled.append(r_sampled)
+                    list_given.append(np.delete(r_given, idx_agent))
 
                 a_all_old = a_all
                 # if a_all[0] > 1 or a_all[1] > 1:
                 #     print('warning!!!', a_all, 's', s)
-                s1P, r, d = env.step(a_all)
+                s1P, r, d = env.step(a_all, list_given)
                 s1 = s1P
 
                 # Compute net reward

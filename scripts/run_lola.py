@@ -184,10 +184,10 @@ def main(exp_name, num_episodes, trace_length, exact, pseudo, grid_size,
                 # giving rewards is handled outside env for the
                 # case of continuous reward-giving actions
                 env = EscapeRoom(trace_length, n_agents,
-                                 allow_giving=False)
+                                 incentivization_inside_env=False)
             else:
                 env = EscapeRoom(trace_length, n_agents,
-                                 allow_giving=True)
+                                 incentivization_inside_env=True)
 
     # Run training
     # for seed in range(trials):
@@ -196,7 +196,8 @@ def main(exp_name, num_episodes, trace_length, exact, pseudo, grid_size,
         # logdir = 'logs/{}/inexact-seed-{}'.format(exp_name, seed)
         # logdir = 'logs/{}/lr0p1-{}'.format(exp_name, seed)
         # logdir = 'logs/{}/n{}-lr10-{}'.format(exp_name, n_agents, seed)
-        logdir = 'logs/{}/n{}-lr0p1-{}'.format(dirname, n_agents, seed)
+        logdir = 'logs/{}/n{}-lr{}-{}'.format(
+            dirname, n_agents, str(lr).replace('.', 'p'), seed)
         logger.configure(dir=logdir)
         start_time = time.time()
         run(env, logdir)
